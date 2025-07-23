@@ -1,0 +1,47 @@
+def train_agent(episodes=10000):
+    env = TicTacToe()
+    agent = QLearningAgent()
+    rewards = []
+    
+     
+    print("Training complete. Q-table size:", len(agent.q_table))
+    for state, actions in list(agent.q_table.items())[:5]:  # Print first 5 states
+        print(f"State: {state}, Actions: {actions}")
+    with open('q_table.pkl', 'wb') as f:
+        pickle.dump(agent.q_table, f)
+    print("Q-table saved to q_table.pkl")
+
+
+
+    for episode in range(episodes):
+        state = env.reset()
+        total_reward = 0
+        while not env.game_over:
+            # Agent's turn (X)
+            actions = env.available_actions()
+            if not actions:
+                break
+            action = agent.choose_action(state, actions)
+            #env.make_move(action, 1)
+            #reward = env.get_reward(1)
+            env.make_move(actions)
+            reward = env.get_reward(1)
+            total_reward += reward
+            next_state = env.get_state()
+
+            if not env.game_over:
+                # Opponent's random move (O)
+                opponent_action = random.choice(env.available_actions())
+                env.make_move(opponent_action)
+                next_state = env.get_state()
+
+            next_actions = env.available_actions()
+            agent.update_q_value(state, action, reward, next_state, next_actions)
+            state = next_state
+
+        rewards.append(total_reward)
+        if (episode + 1) % 1000 == 0:
+            avg_reward = np.mean(rewards[-1000:])
+            print(f"Episode {episode + 1}, Average Reward (last 1000): {avg_reward:.3f}")
+
+    return agent, rewards

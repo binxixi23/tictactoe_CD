@@ -1,0 +1,10 @@
+import matplotlib.pyplot as plt
+
+#agent, rewards = train_agent(episodes=10000)
+# Plot rewards over episodes
+plt.plot(rewards)
+
+plt.xlabel('Episodes')
+plt.ylabel('Total Reward')
+plt.title('Agent Learning Progress')
+plt.show()

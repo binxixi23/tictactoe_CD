@@ -1,119 +1,117 @@
-from itertools import groupby
-from itertools import product
-import argparse
-import os
-from copy import deepcopy
-from typing import Optional, Tuple
-
-import gym
 import numpy as np
-import torch
+import random
+import pickle
 
-from torch.utils.tensorboard import SummaryWriter
-
-
-class TicTacToe():
-
+class TicTacToe:
     def __init__(self):
-        """initialising the board"""
-        # initialise state as an array
-        self.state = [np.nan for _ in range(9)]  # initialises the board position, can initialise to an array or matrix
-        # all possible numbers
-        self.all_possible_numbers = [i for i in range(1, len(self.state) + 1)] # , can initialise to an array or matrix
-        self.reset()
+        self.board = np.zeros((3, 3), dtype=int)  # 0: empty, 1: X (agent), 2: O (opponent)
+        self.done = False
+        self.game_over = False
+        self.winner = None
+        self.current_player = 1  # X starts
+    def reset(self):
+        self.board = np.zeros((3, 3), dtype=int)
+        self.current_player = 1
+        return self.get_state()
+    def reset(self):
+        self.board = np.zeros((3, 3), dtype=int)
+        self.done = False
+        self.winner = None
+        return self.get_state()
 
+    def get_state(self):
+        return tuple(self.board.flatten())
 
-    def is_winning(self, curr_state):
-        winning_pattern = [(0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6)]
-        
-        """Takes state as an input and returns whether any row, column or diagonal has winning sum
-        Example: Input state- [1, 2, 3, 4, nan, nan, nan, nan, nan]
-        Output = False"""
-        """ winning_pattern = [(0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6)]"""
-        
-        for pattern in winning_pattern:
-            if not np.isnan(curr_state[pattern[0]]) and not np.isnan(curr_state[pattern[1]]) and not np.isnan(curr_state[pattern[2]]):
-                pattern_state = curr_state[pattern[0]] + curr_state[pattern[1]] + curr_state[pattern[2]]
-                if pattern_state == 15:
-                    return True
+    def available_actions(self):
+        return [(i, j) for i in range(3) for j in range(3) if self.board[i, j] == 0]
+
+    def step(self, action, player):
+        i, j = action
+        self.board[i, j] = player
+        reward = 0
+
+        # Check for win
+        if self.check_win(player):
+            self.done = True
+            self.winner = player
+            reward = 1 if player == 1 else -1
+        # Check for draw
+        elif len(self.available_actions()) == 0:
+            self.done = True
+            reward = 0.5
+
+        return self.get_state(), reward, self.done
+     
+    def available_moves(self):
+        return [(i, j) for i in range(3) for j in range(3) if self.board[i, j] == 0]
+
+    def make_move(self, move):
+        if move in self.available_moves():
+            self.board[move] = self.current_player
+            self.current_player = -self.current_player
+            return True
         return False
 
+    def check_winner(self):
+        # Check rows, columns, diagonals
+        for i in range(3):
+            if abs(sum(self.board[i, :])) == 3:
+                return self.board[i, 0]
+            if abs(sum(self.board[:, i])) == 3:
+                return self.board[0, i]
+        if abs(sum(self.board.diagonal())) == 3:
+            return self.board[0, 0]
+        if abs(sum(np.fliplr(self.board).diagonal())) == 3:
+            return self.board[0, 2]
+        if not self.available_moves():
+            return 0  # Draw
+        return None  # Game ongoing
 
-    def is_terminal(self, curr_state):
-        # Terminal state could be winning state or when the board is filled up
-        if self.is_winning(curr_state) == True:
-            return True, 'Win'
-
-        elif len(self.allowed_positions(curr_state)) ==0:
-            return True, 'Tie'
-
-        else:
-            return False, 'Resume'
-
-
-
-    def allowed_positions(self, curr_state):
-        """Takes state as an input and returns all indexes that are blank"""
-        return [i for i, val in enumerate(curr_state) if np.isnan(val)]
-
-
-    def allowed_values(self, curr_state):
-        """Takes the current state as input and returns all possible (unused) values that can be placed on the board"""
-        used_values = [val for val in curr_state if not np.isnan(val)]
-        agent_values = [val for val in self.all_possible_numbers if val not in used_values and val % 2 !=0]
-        env_values = [val for val in self.all_possible_numbers if val not in used_values and val % 2 ==0]
-        return (agent_values, env_values)
+    def print_board(self):
+        symbols = {0: '.', 1: 'X', -1: 'O'}
+        for row in self.board:
+            print(' '.join(symbols[cell] for cell in row))
+        print()
 
 
-    def action_space(self, curr_state):
-        """Takes the current state as input and returns all possible actions, i.e, all combinations of allowed positions and allowed values"""
+    def check_win(self, player):
+        # Check rows, columns, and diagonals
+        for i in range(3):
+            if all(self.board[i, :] == player) or all(self.board[:, i] == player):
+                return True
+        if all(self.board.diagonal() == player) or all(np.fliplr(self.board).diagonal() == player):
+            return True
+        return False
 
-        agent_actions = product(self.allowed_positions(curr_state), self.allowed_values(curr_state)[0])
-        env_actions = product(self.allowed_positions(curr_state), self.allowed_values(curr_state)[1])
-        return (agent_actions, env_actions)
+    def check_game_over(self):
+        # Check rows, columns, and diagonals
+        for i in range(3):
+            if abs(sum(self.board[i, :])) == 3:
+                self.game_over = True
+                self.winner = int(self.board[i, 0])
+                return
+            if abs(sum(self.board[:, i])) == 3:
+                self.game_over = True
+                self.winner = int(self.board[0, i])
+                return
+        if abs(sum(self.board.diagonal())) == 3:
+            self.game_over = True
+            self.winner = int(self.board[0, 0])
+            return
+        if abs(sum(np.fliplr(self.board).diagonal())) == 3:
+            self.game_over = True
+            self.winner = int(self.board[0, 2])
+            return
+        if not self.available_actions():
+            self.game_over = True
+            self.winner = 0  # Draw
 
-
-
-
-    def state_transition(self, curr_state, curr_action):
-        
-        """Takes current state and action and returns the board position just after agent's move.
-        Example: Input state- [1, 2, 3, 4, nan, nan, nan, nan, nan], action- [7, 9] or [position, value]
-        Output = [1, 2, 3, 4, nan, nan, nan, 9, nan]
-        """
-        
-        curr_state[curr_action[0]] = curr_action[1]
-        return curr_state
-
-
-    def step(self, curr_state, curr_action):
-        
-        
-        """Takes current state and action and returns the next state, reward and whether the state is terminal. Hint: First, check the board position after
-        agent's move, whether the game is won/loss/tied. Then incorporate environment's move and again check the board status.
-        Example: Input state- [1, 2, 3, 4, nan, nan, nan, nan, nan], action- [7, 9] or [position, value]
-        Output = ([1, 2, 3, 4, nan, nan, nan, 9, nan], -1, False)"""
-        final_state = False
-        intermediate_state = self.state_transition(curr_state, curr_action)
-        final_state, game_status = self.is_terminal(intermediate_state)
-        if final_state == True:
-            if game_status == 'Win':
-                reward=10
+    def get_reward(self, player):
+        if self.game_over:
+            if self.winner == player:
+                return 1  # Win
+            elif self.winner == -player:
+                return -1  # Loss
             else:
-                reward=0
-        else:
-            pos = random.choice(self.allowed_positions(intermediate_state))
-            val = random.choice(self.allowed_values(intermediate_state)[1])
-            intermediate_state[pos]= val
-            final_state, game_status = self.is_terminal(intermediate_state)
-            if final_state == True:
-                if game_status == 'Win':
-                    reward=-10
-                else:
-                    reward=0
-            else:
-                reward=-1
-        return intermediate_state, reward, final_state
-
-    def reset(self):
-        return self.state
+                return -0.5  # Draw
+        return 0  # Ongoing game
